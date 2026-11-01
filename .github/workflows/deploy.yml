@@ -1,0 +1,68 @@
+name: Deploy to Lolipop
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lolipop-testweb4
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SSHPASS: ${{ secrets.LOLIPOP_SSH_PASSWORD }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check credentials
+        run: |
+          if [ -z "$SSHPASS" ]; then
+            echo '::error::Add the repository secret LOLIPOP_SSH_PASSWORD before deploying.'
+            exit 1
+          fi
+      - name: Install transfer tools
+        run: sudo apt-get update -qq && sudo apt-get install -y sshpass rsync
+      - name: Deploy tracked files with backups
+        shell: bash
+        run: |
+          set -euo pipefail
+          install -m 600 .github/deploy/known_hosts "$RUNNER_TEMP/lolipop_known_hosts"
+          export RSYNC_RSH="sshpass -e ssh -p 2222 -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$RUNNER_TEMP/lolipop_known_hosts -o ConnectTimeout=20 -o NumberOfPasswordPrompts=1"
+          # Stop if this is not an existing WordPress installation.
+          sshpass -e ssh -p 2222 \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$RUNNER_TEMP/lolipop_known_hosts" \
+            -o ConnectTimeout=20 -o NumberOfPasswordPrompts=1 \
+            ciao.jp-elegirl@ssh.lolipop.jp \
+            'test -f /home/users/0/ciao.jp-elegirl/web/testweb4/wp-config.php && command -v rsync >/dev/null && mkdir -p /home/users/0/ciao.jp-elegirl/deploy-backups/mimura'
+          # Only versioned files are sent. Remote-only files are never deleted.
+          git ls-files -z | rsync -rz --checksum --omit-dir-times \
+            --no-perms --no-owner --no-group --itemize-changes \
+            --from0 --files-from=- \
+            --exclude='/.github/' --exclude='/docs/' \
+            --exclude='/.gitignore' --exclude='/README*' \
+            --exclude='/wp-config.php' --exclude='/.htaccess' \
+            --exclude='/local-xdebuginfo.php' --exclude='.env*' \
+            --exclude='*.sql' --exclude='*.sql.gz' --exclude='*.wpress' \
+            --exclude='*.log' --exclude='*.zip' --exclude='.DS_Store' \
+            --exclude='/wp-content/uploads/' \
+            --exclude='/wp-content/ai1wm-backups/' \
+            --exclude='/wp-content/cache/' \
+            --exclude='/wp-content/upgrade/' \
+            --exclude='/wp-content/upgrade-temp-backup/' \
+            --exclude='/wp-content/plugins/all-in-one-wp-migration/storage/' \
+            --exclude='/wp-content/plugins/all-in-one-wp-migration-unlimited-extension/' \
+            --backup \
+            --backup-dir="/home/users/0/ciao.jp-elegirl/deploy-backups/mimura/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            ./ ciao.jp-elegirl@ssh.lolipop.jp:/home/users/0/ciao.jp-elegirl/web/testweb4/
+          echo 'Deployed code to https://testweb4.elegirl.net/' >> "$GITHUB_STEP_SUMMARY"
