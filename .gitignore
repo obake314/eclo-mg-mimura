@@ -1,0 +1,24 @@
+# Local credentials and environment
+/wp-config.php
+/.htaccess
+/local-xdebuginfo.php
+.env
+.env.*
+!.env.example
+.DS_Store
+# Site data and generated files
+/wp-content/uploads/
+/wp-content/ai1wm-backups/
+/wp-content/cache/
+/wp-content/upgrade/
+/wp-content/upgrade-temp-backup/
+/wp-content/debug.log
+*.log
+*.sql
+*.sql.gz
+*.wpress
+*.zip
+# Licensed migration extension
+/wp-content/plugins/all-in-one-wp-migration-unlimited-extension/
+
+/wp-content/plugins/all-in-one-wp-migration/storage/
